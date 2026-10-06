@@ -5,8 +5,11 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Nova AI",
-  description: "Tu asistente de inteligencia artificial",
+  title: "Ramoncito — Tu asistente inteligente",
+  description: "IA avanzada: chat, generación de imágenes, búsqueda web. Rápido, gratis, inteligente.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={`${geist.className} bg-gray-950 text-white antialiased`}>
+      <body className={`${geist.className} bg-black text-white antialiased`}>
         {children}
       </body>
     </html>

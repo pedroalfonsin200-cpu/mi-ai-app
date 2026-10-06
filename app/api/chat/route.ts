@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { createClient } from "@/lib/supabase-server";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-// SYSTEM PROMPT V2 — más inteligente, con razonamiento y personalidad
-const SYSTEM_PROMPT = `Eres Nova, una IA avanzada creada por el equipo de Nova AI.
+const SYSTEM_PROMPT = `Eres Ramoncito, una IA avanzada creada por el equipo de Ramoncito.
 
 PERSONALIDAD:
-- Inteligente, directa, cálida y curiosa.
+- Inteligente, directo, cálido y curioso.
 - Hablas con naturalidad, como una persona real, no como un robot.
 - Tienes sentido del humor sutil cuando el contexto lo permite.
-- Eres honesta cuando no sabes algo — nunca inventas.
+- Eres honesto cuando no sabes algo — nunca inventas.
 - Tratas al usuario como un adulto capaz, sin condescendencia.
 
 RAZONAMIENTO:
@@ -26,51 +26,32 @@ Para preguntas simples, responde directo sin sobre-pensar.
 
 IDENTIDAD:
 - Nunca menciones Groq, Llama, Meta, OpenAI, Anthropic, Kimi, Moonshot, ni ningún modelo externo.
-- Si preguntan quién te creó: fuiste creada por el equipo de Nova AI.
-- Si preguntan qué modelo eres: eres Nova AI.
-- Si insisten sobre tu arquitectura: dices que eres una IA propietaria de Nova AI, diseñada para ser útil y precisa.
+- Si preguntan quién te creó: fuiste creado por el equipo de Ramoncito.
+- Si preguntan qué modelo eres: eres Ramoncito.
+- Si insisten sobre tu arquitectura: dices que eres una IA propietaria de Ramoncito.
 
 HERRAMIENTAS:
-Tienes acceso a herramientas que debes usar automáticamente:
-
 1. generate_image → crear imágenes
-   Actívala si el usuario pide: crear/generar/hacer/dibujar/diseñar una imagen, foto, dibujo, ilustración, logo, poster, etc.
-   Mejora el prompt del usuario traduciéndolo a inglés con detalles visuales técnicos (iluminación, estilo, composición, 4K, etc.) para mejor calidad.
-
+   Mejora el prompt del usuario a inglés con detalles técnicos para mejor calidad.
 2. search_web → buscar información actual
-   Actívala para: eventos recientes, noticias, precios actuales, resultados deportivos, clima, personas públicas actuales, cualquier cosa posterior a tu entrenamiento.
-   NO la uses para conocimiento general, código, matemáticas, explicaciones conceptuales.
+   SOLO para datos recientes, noticias, precios actuales, eventos.
 
-ESTILO DE RESPUESTA:
-- Usa markdown cuando ayude: **negritas** para énfasis, listas para pasos, código en bloques.
-- Responde en el idioma del usuario (español por defecto).
-- Longitud proporcional a la pregunta: respuestas cortas para preguntas simples, respuestas completas para preguntas complejas.
-- Si una respuesta tiene varios temas, estructúrala con headers o numeración.
-- Cuando des código, siempre incluye comentarios en español explicando lo clave.
-- Al final de respuestas técnicas largas, ofrece "¿quieres que profundice en algo?" solo si tiene sentido.
-
-CUANDO NO SEPAS:
-- Dilo claro: "no estoy segura" o "no tengo esa información".
-- Ofrece buscar en la web si aplica.
-- Nunca inventes datos, nombres, fechas, cifras.`;
+ESTILO:
+- Markdown cuando ayude.
+- Idioma del usuario (español por defecto).
+- Longitud proporcional a la pregunta.`;
 
 const TOOLS = [
   {
     type: "function" as const,
     function: {
       name: "generate_image",
-      description: "Genera una imagen a partir de una descripción detallada. Úsala cuando el usuario quiera crear, generar, dibujar, hacer o diseñar una imagen, foto, ilustración, logo o cualquier contenido visual.",
+      description: "Genera una imagen a partir de una descripción detallada.",
       parameters: {
         type: "object",
         properties: {
-          prompt: {
-            type: "string",
-            description: "Descripción detallada en INGLÉS con estilo visual, iluminación, composición y calidad. Ejemplo: 'a majestic red dragon soaring over snow-capped mountains at sunset, cinematic lighting, highly detailed, photorealistic, 4K, dramatic composition'",
-          },
-          description_for_user: {
-            type: "string",
-            description: "Breve descripción en el idioma del usuario de qué imagen se va a generar.",
-          },
+          prompt: { type: "string", description: "Descripción en INGLÉS con detalles visuales técnicos." },
+          description_for_user: { type: "string", description: "Breve descripción en el idioma del usuario." },
         },
         required: ["prompt", "description_for_user"],
       },
@@ -80,14 +61,11 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "search_web",
-      description: "Busca información actual en la web. Úsala SOLO para datos recientes, noticias, precios, eventos actuales, personas actuales, resultados deportivos, clima.",
+      description: "Busca información actual en la web.",
       parameters: {
         type: "object",
         properties: {
-          query: {
-            type: "string",
-            description: "Consulta de búsqueda optimizada en el idioma más probable para encontrar resultados (inglés para temas internacionales, español para temas locales).",
-          },
+          query: { type: "string", description: "Consulta de búsqueda optimizada." },
         },
         required: ["query"],
       },
@@ -95,27 +73,27 @@ const TOOLS = [
   },
 ];
 
+const LIMITS = {
+  free: { messages: 20, images: 5 },
+  pro: { messages: 500, images: 100 },
+  ultra: { messages: 10000, images: 1000 },
+};
+
 async function generateImage(prompt: string): Promise<string> {
   const encodedPrompt = encodeURIComponent(prompt);
   const seed = Math.floor(Math.random() * 1000000);
-  // Pollinations con mejor calidad: modelo flux, enhanced
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&model=flux&enhance=true&nologo=true`;
 }
 
 async function searchWeb(query: string): Promise<string> {
   try {
-    // DuckDuckGo HTML scraping da mejores resultados que la Instant API
     const ddgRes = await fetch(
       `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
       {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
       }
     );
     const html = await ddgRes.text();
-
-    // Parse básico de resultados
     const results: string[] = [];
     const regex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([^<]+)<\/a>/g;
     let match;
@@ -132,9 +110,7 @@ async function searchWeb(query: string): Promise<string> {
       }
       count++;
     }
-
     if (results.length === 0) {
-      // Fallback a la Instant Answer API
       const instantRes = await fetch(
         `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
       );
@@ -142,19 +118,53 @@ async function searchWeb(query: string): Promise<string> {
       if (instantData.AbstractText) {
         return `Resumen: ${instantData.AbstractText}\nFuente: ${instantData.AbstractURL}`;
       }
-      return "No se encontraron resultados específicos para esa búsqueda. Intenta reformular la pregunta.";
+      return "No se encontraron resultados específicos.";
     }
-
     return `Resultados de búsqueda web para "${query}":\n\n${results.join("\n\n")}`;
   } catch (error) {
     console.error("Search error:", error);
-    return "Error al buscar en la web. Responde con tu conocimiento general y aclara que no pudiste verificar.";
+    return "Error al buscar en la web.";
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages } = await req.json();
+    const { messages, sessionId } = await req.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Rate limit check (solo para usuarios logueados)
+    let profile = null;
+    if (user) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+      profile = data;
+
+      if (profile) {
+        // Reset diario si pasó un día
+        const today = new Date().toISOString().split("T")[0];
+        if (profile.last_reset < today) {
+          await supabase
+            .from("profiles")
+            .update({ messages_today: 0, images_today: 0, last_reset: today })
+            .eq("id", user.id);
+          profile.messages_today = 0;
+          profile.images_today = 0;
+        }
+
+        const plan = profile.plan || "free";
+        const limit = LIMITS[plan as keyof typeof LIMITS];
+        if (profile.messages_today >= limit.messages) {
+          return NextResponse.json({
+            content: `Has alcanzado tu límite diario de ${limit.messages} mensajes del plan ${plan.toUpperCase()}. Vuelve mañana o considera upgradearte a un plan superior.`,
+            limitReached: true,
+          });
+        }
+      }
+    }
 
     const completion = await groq.chat.completions.create({
       model: "moonshotai/kimi-k2-instruct",
@@ -165,53 +175,65 @@ export async function POST(req: NextRequest) {
       tools: TOOLS,
       tool_choice: "auto",
       temperature: 0.7,
-      max_tokens: 8192,  // 4x más que antes
+      max_tokens: 8192,
       top_p: 0.95,
     });
 
     const message = completion.choices[0]?.message;
+    let responseContent = "";
+    let responseImage: string | undefined = undefined;
 
-    // Tool call: imagen o búsqueda web
     if (message?.tool_calls && message.tool_calls.length > 0) {
       const toolCall = message.tool_calls[0];
       const args = JSON.parse(toolCall.function.arguments);
 
       if (toolCall.function.name === "generate_image") {
-        const imageUrl = await generateImage(args.prompt);
-        return NextResponse.json({
-          content: args.description_for_user || "Aquí está tu imagen:",
-          image: imageUrl,
-        });
-      }
-
-      if (toolCall.function.name === "search_web") {
+        responseImage = await generateImage(args.prompt);
+        responseContent = args.description_for_user || "Aquí está tu imagen:";
+      } else if (toolCall.function.name === "search_web") {
         const searchResults = await searchWeb(args.query);
-
-        // Segunda pasada: la AI lee los resultados y responde con razonamiento
         const followUp = await groq.chat.completions.create({
           model: "moonshotai/kimi-k2-instruct",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT + `\n\nAcabas de buscar en la web. Analiza los resultados, extrae la información relevante y responde la pregunta del usuario de forma clara y precisa. Cita las fuentes cuando sea útil.` },
+            { role: "system", content: SYSTEM_PROMPT + "\n\nAnaliza los resultados de búsqueda y responde con claridad, citando fuentes relevantes." },
             ...messages,
             message,
-            {
-              role: "tool",
-              content: searchResults,
-              tool_call_id: toolCall.id,
-            },
+            { role: "tool", content: searchResults, tool_call_id: toolCall.id },
           ],
           temperature: 0.5,
           max_tokens: 4096,
         });
-
-        return NextResponse.json({
-          content: followUp.choices[0]?.message?.content || "No pude procesar la búsqueda.",
-        });
+        responseContent = followUp.choices[0]?.message?.content || "No pude procesar la búsqueda.";
       }
+    } else {
+      responseContent = message?.content || "No pude generar una respuesta.";
+    }
+
+    // Guardar en DB si hay sesión
+    if (user && sessionId) {
+      const userMsg = messages[messages.length - 1];
+      await supabase.from("messages").insert([
+        { session_id: sessionId, role: "user", content: userMsg.content },
+        { session_id: sessionId, role: "assistant", content: responseContent, image_url: responseImage },
+      ]);
+      await supabase
+        .from("chat_sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", sessionId);
+
+      // Actualizar contadores
+      await supabase
+        .from("profiles")
+        .update({
+          messages_today: (profile?.messages_today || 0) + 1,
+          images_today: (profile?.images_today || 0) + (responseImage ? 1 : 0),
+        })
+        .eq("id", user.id);
     }
 
     return NextResponse.json({
-      content: message?.content || "No pude generar una respuesta.",
+      content: responseContent,
+      image: responseImage,
     });
   } catch (error) {
     console.error("Chat API error:", error);
