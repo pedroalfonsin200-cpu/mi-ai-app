@@ -5,52 +5,71 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// SYSTEM PROMPT V2 — más inteligente, con razonamiento y personalidad
 const SYSTEM_PROMPT = `Eres Nova, una IA avanzada creada por el equipo de Nova AI.
-Eres inteligente, directa, útil y amigable.
-Respondes en el idioma del usuario (español por defecto).
-Nunca menciones Groq, Llama, Meta, OpenAI, ni ningún modelo de AI externo.
-Si te preguntan quién te creó, dices que fuiste creada por el equipo de Nova AI.
-Si te preguntan qué modelo eres, dices que eres Nova AI.
 
-HERRAMIENTAS DISPONIBLES:
-Tienes acceso a herramientas que debes usar automáticamente según el contexto:
+PERSONALIDAD:
+- Inteligente, directa, cálida y curiosa.
+- Hablas con naturalidad, como una persona real, no como un robot.
+- Tienes sentido del humor sutil cuando el contexto lo permite.
+- Eres honesta cuando no sabes algo — nunca inventas.
+- Tratas al usuario como un adulto capaz, sin condescendencia.
 
-1. generate_image: Úsala cuando el usuario quiera crear, generar, dibujar, hacer, o diseñar una imagen, foto, dibujo, ilustración, logo, etc.
-   Ejemplos que la activan:
-   - "créame una imagen de un dragón"
-   - "haz un dibujo de un gato"
-   - "genera una foto de..."
-   - "quiero ver una ilustración de..."
-   - "dibújame un..."
-   Antes de llamarla, mejora el prompt del usuario con detalles visuales en inglés para mejor calidad.
+RAZONAMIENTO:
+Antes de responder preguntas complejas, piensa paso a paso:
+1. ¿Qué me están preguntando realmente?
+2. ¿Qué información necesito?
+3. ¿Qué pasos lleva la respuesta correcta?
+4. Verifica tu lógica antes de dar la respuesta final.
 
-2. search_web: Úsala cuando el usuario pregunta sobre eventos actuales, noticias, precios, datos recientes, o cosas que requieren información en tiempo real.
-   Ejemplos:
-   - "qué pasó hoy con..."
-   - "cuál es el precio actual de..."
-   - "últimas noticias de..."
+Para preguntas simples, responde directo sin sobre-pensar.
 
-Para conversación normal, chistes, código, explicaciones, consejos, etc. NO uses herramientas, solo responde directamente.
+IDENTIDAD:
+- Nunca menciones Groq, Llama, Meta, OpenAI, Anthropic, Kimi, Moonshot, ni ningún modelo externo.
+- Si preguntan quién te creó: fuiste creada por el equipo de Nova AI.
+- Si preguntan qué modelo eres: eres Nova AI.
+- Si insisten sobre tu arquitectura: dices que eres una IA propietaria de Nova AI, diseñada para ser útil y precisa.
 
-Tus respuestas son claras, bien estructuradas y al grano.
-Usas markdown cuando ayuda a la claridad (listas, código, negritas).`;
+HERRAMIENTAS:
+Tienes acceso a herramientas que debes usar automáticamente:
+
+1. generate_image → crear imágenes
+   Actívala si el usuario pide: crear/generar/hacer/dibujar/diseñar una imagen, foto, dibujo, ilustración, logo, poster, etc.
+   Mejora el prompt del usuario traduciéndolo a inglés con detalles visuales técnicos (iluminación, estilo, composición, 4K, etc.) para mejor calidad.
+
+2. search_web → buscar información actual
+   Actívala para: eventos recientes, noticias, precios actuales, resultados deportivos, clima, personas públicas actuales, cualquier cosa posterior a tu entrenamiento.
+   NO la uses para conocimiento general, código, matemáticas, explicaciones conceptuales.
+
+ESTILO DE RESPUESTA:
+- Usa markdown cuando ayude: **negritas** para énfasis, listas para pasos, código en bloques.
+- Responde en el idioma del usuario (español por defecto).
+- Longitud proporcional a la pregunta: respuestas cortas para preguntas simples, respuestas completas para preguntas complejas.
+- Si una respuesta tiene varios temas, estructúrala con headers o numeración.
+- Cuando des código, siempre incluye comentarios en español explicando lo clave.
+- Al final de respuestas técnicas largas, ofrece "¿quieres que profundice en algo?" solo si tiene sentido.
+
+CUANDO NO SEPAS:
+- Dilo claro: "no estoy segura" o "no tengo esa información".
+- Ofrece buscar en la web si aplica.
+- Nunca inventes datos, nombres, fechas, cifras.`;
 
 const TOOLS = [
   {
     type: "function" as const,
     function: {
       name: "generate_image",
-      description: "Genera una imagen a partir de una descripción. Úsala cuando el usuario pida crear, generar, dibujar o hacer una imagen, foto, dibujo o ilustración.",
+      description: "Genera una imagen a partir de una descripción detallada. Úsala cuando el usuario quiera crear, generar, dibujar, hacer o diseñar una imagen, foto, ilustración, logo o cualquier contenido visual.",
       parameters: {
         type: "object",
         properties: {
           prompt: {
             type: "string",
-            description: "Descripción detallada de la imagen en inglés con estilo visual, iluminación, composición. Ejemplo: 'a majestic red dragon flying over snow mountains, cinematic lighting, highly detailed, 4k'",
+            description: "Descripción detallada en INGLÉS con estilo visual, iluminación, composición y calidad. Ejemplo: 'a majestic red dragon soaring over snow-capped mountains at sunset, cinematic lighting, highly detailed, photorealistic, 4K, dramatic composition'",
           },
           description_for_user: {
             type: "string",
-            description: "Breve descripción en el idioma del usuario de qué imagen se va a generar. Ejemplo: 'un dragón rojo volando sobre montañas nevadas'",
+            description: "Breve descripción en el idioma del usuario de qué imagen se va a generar.",
           },
         },
         required: ["prompt", "description_for_user"],
@@ -61,13 +80,13 @@ const TOOLS = [
     type: "function" as const,
     function: {
       name: "search_web",
-      description: "Busca información actual en la web. Úsala cuando necesites datos recientes, noticias, precios actuales, o eventos del momento.",
+      description: "Busca información actual en la web. Úsala SOLO para datos recientes, noticias, precios, eventos actuales, personas actuales, resultados deportivos, clima.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "La consulta de búsqueda",
+            description: "Consulta de búsqueda optimizada en el idioma más probable para encontrar resultados (inglés para temas internacionales, español para temas locales).",
           },
         },
         required: ["query"],
@@ -78,31 +97,58 @@ const TOOLS = [
 
 async function generateImage(prompt: string): Promise<string> {
   const encodedPrompt = encodeURIComponent(prompt);
-  const seed = Math.floor(Math.random() * 100000);
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true`;
+  const seed = Math.floor(Math.random() * 1000000);
+  // Pollinations con mejor calidad: modelo flux, enhanced
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&model=flux&enhance=true&nologo=true`;
 }
 
 async function searchWeb(query: string): Promise<string> {
   try {
-    const res = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
+    // DuckDuckGo HTML scraping da mejores resultados que la Instant API
+    const ddgRes = await fetch(
+      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      }
     );
-    const data = await res.json();
-    let context = "";
-    if (data.AbstractText) {
-      context += `${data.AbstractText}\nFuente: ${data.AbstractURL}\n\n`;
+    const html = await ddgRes.text();
+
+    // Parse básico de resultados
+    const results: string[] = [];
+    const regex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([^<]+)<\/a>/g;
+    let match;
+    let count = 0;
+    while ((match = regex.exec(html)) && count < 8) {
+      const url = match[1].replace(/^\/\/duckduckgo\.com\/l\/\?uddg=/, "").split("&")[0];
+      const title = match[2].replace(/<[^>]+>/g, "").trim();
+      const snippet = match[3].replace(/<[^>]+>/g, "").trim();
+      try {
+        const decodedUrl = decodeURIComponent(url);
+        results.push(`[${count + 1}] ${title}\n${snippet}\nFuente: ${decodedUrl}`);
+      } catch {
+        results.push(`[${count + 1}] ${title}\n${snippet}`);
+      }
+      count++;
     }
-    if (data.RelatedTopics?.length > 0) {
-      data.RelatedTopics.slice(0, 5).forEach((topic: { Text?: string; FirstURL?: string }, i: number) => {
-        if (topic.Text) {
-          context += `${i + 1}. ${topic.Text}\n`;
-          if (topic.FirstURL) context += `   ${topic.FirstURL}\n`;
-        }
-      });
+
+    if (results.length === 0) {
+      // Fallback a la Instant Answer API
+      const instantRes = await fetch(
+        `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`
+      );
+      const instantData = await instantRes.json();
+      if (instantData.AbstractText) {
+        return `Resumen: ${instantData.AbstractText}\nFuente: ${instantData.AbstractURL}`;
+      }
+      return "No se encontraron resultados específicos para esa búsqueda. Intenta reformular la pregunta.";
     }
-    return context || "No se encontraron resultados específicos para esa búsqueda.";
-  } catch {
-    return "No se pudo completar la búsqueda web.";
+
+    return `Resultados de búsqueda web para "${query}":\n\n${results.join("\n\n")}`;
+  } catch (error) {
+    console.error("Search error:", error);
+    return "Error al buscar en la web. Responde con tu conocimiento general y aclara que no pudiste verificar.";
   }
 }
 
@@ -111,7 +157,7 @@ export async function POST(req: NextRequest) {
     const { messages } = await req.json();
 
     const completion = await groq.chat.completions.create({
-      model: "openai/gpt-oss-120b",
+      model: "moonshotai/kimi-k2-instruct",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         ...messages,
@@ -119,12 +165,13 @@ export async function POST(req: NextRequest) {
       tools: TOOLS,
       tool_choice: "auto",
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: 8192,  // 4x más que antes
+      top_p: 0.95,
     });
 
     const message = completion.choices[0]?.message;
 
-    // Si llama a una herramienta
+    // Tool call: imagen o búsqueda web
     if (message?.tool_calls && message.tool_calls.length > 0) {
       const toolCall = message.tool_calls[0];
       const args = JSON.parse(toolCall.function.arguments);
@@ -139,11 +186,12 @@ export async function POST(req: NextRequest) {
 
       if (toolCall.function.name === "search_web") {
         const searchResults = await searchWeb(args.query);
-        // Segunda llamada con los resultados de búsqueda
+
+        // Segunda pasada: la AI lee los resultados y responde con razonamiento
         const followUp = await groq.chat.completions.create({
-          model: "openai/gpt-oss-120b",
+          model: "moonshotai/kimi-k2-instruct",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: SYSTEM_PROMPT + `\n\nAcabas de buscar en la web. Analiza los resultados, extrae la información relevante y responde la pregunta del usuario de forma clara y precisa. Cita las fuentes cuando sea útil.` },
             ...messages,
             message,
             {
@@ -153,7 +201,7 @@ export async function POST(req: NextRequest) {
             },
           ],
           temperature: 0.5,
-          max_tokens: 1024,
+          max_tokens: 4096,
         });
 
         return NextResponse.json({
